@@ -1,3 +1,4 @@
+import logging
 from telegram import Update, Bot, InputMediaPhoto
 from telegram.ext import (
     Application,
@@ -7,14 +8,19 @@ from telegram.ext import (
     CallbackContext,
 )
 from bot.agent.open_ai_chat_agent import OpenAIAgent  # your agent class
+from bot.agent.base_agent import AbstractAgentClass
+from bot.common.constants import TELEGRAM_TOKEN
+
+
+logger = logging.getLogger(__name__)
 
 
 class Client:
-    def __init__(self, token: str, openai_api_key: str):
-        self.application = Application.builder().token(token).build()
+    def __init__(self):
+        self.application = Application.builder().token(TELEGRAM_TOKEN).build()
 
         # initialize your agent
-        self.agent = OpenAIAgent(api_key=openai_api_key, instructions='you are tarot expert', model='gpt-4.1')
+        self.agent: AbstractAgentClass = OpenAIAgent()
 
         # register handlers
         self.application.add_handler(CommandHandler("start", self.start))

@@ -1,6 +1,7 @@
-def main():
-    print("Hello from tarot-bot!")
-
+from bot.client.client import Client
+from bot.common.logging import setup_logging
 
 if __name__ == "__main__":
-    main()
+    setup_logging()
+    client = Client()
+    client.run()

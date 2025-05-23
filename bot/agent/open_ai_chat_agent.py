@@ -1,12 +1,14 @@
-from bot.agent.base_agent import AbstractAgentClass
 from openai import OpenAI
+
+from bot.agent.base_agent import AbstractAgentClass
+from bot.common.constants import OPENAI_TOKEN, MODEL, scenarios
 
 
 class OpenAIAgent(AbstractAgentClass):
-    def __init__(self, api_key: str, instructions: str, model: str):
-        self.client = OpenAI(api_key=api_key)
-        self.model = model
-        self.instructions = instructions
+    def __init__(self, ):
+        self.client = OpenAI(api_key=OPENAI_TOKEN)
+        self.model = MODEL
+        self.instructions = scenarios['instructions']
 
     def ask(self, text: str|None=None, image: bytes|None=None) -> str:
         """
