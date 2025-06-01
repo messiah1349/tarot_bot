@@ -1,0 +1,4 @@
+agent: open_ai_chat_agent #test_agent
+model: gpt-4.1-nano-2025-04-14
+
+chat_history_message_count: 15

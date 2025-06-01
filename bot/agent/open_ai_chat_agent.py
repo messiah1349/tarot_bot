@@ -1,54 +1,72 @@
 from openai import OpenAI
 
-from bot.agent.base_agent import AbstractAgentClass
-from bot.common.constants import OPENAI_TOKEN, MODEL, scenarios
+from bot.agent.base_agent import AbstractAgentClass, messages_typing
+from bot.common.constants import OPENAI_TOKEN, scenarios, bot_parameters
 
 
 class OpenAIAgent(AbstractAgentClass):
-    def __init__(self, ):
+    def __init__(self):
         self.client = OpenAI(api_key=OPENAI_TOKEN)
-        self.model = MODEL
+        self.model = bot_parameters['model']
         self.instructions = scenarios['instructions']
 
-    def ask(self, text: str|None=None, image: bytes|None=None) -> str:
+    def ask(self, messages: messages_typing) -> str:
         """
         Send either text or image (or both) to OpenAI and return the assistant response.
         """
         # build your messages list
-        messages = []
-        if text:
-            messages.append({"role": "user", "content": text})
 
-        if image:
-            # if using vision-capable model
-            return self._ask_with_image(image, text)
+        transform_messages = self.transform_messages(messages)
 
-        return self._ask_text_only(messages)
-
-    def _ask_text_only(self, messages: list) -> str:
         response = self.client.responses.create(
             model=self.model,
             instructions=self.instructions,
-            input=messages,
+            input=transform_messages,
             temperature=.7,
         )
         return response.output_text
 
-    def _ask_with_image(self, image_bytes: bytes, text: str|None):
-        messages = [
-            {
-                'role': 'user',
-                'content': [
-                    {'type': 'input_text', 'text': text},
-                    {'type': 'input_image', 'image_url': f"data:image/jpeg;base64,{image_bytes}"},
-                ]
-            }
-        ]
-        response = self.client.responses.create(
-            model=self.model,
-            instructions=self.instructions,
-            input=messages,
-        )
+    @staticmethod
+    def transform_messages(messages: messages_typing) -> messages_typing:
+        '''
+            adapt message from telegram client history to open ai format
+            mostly for image url transformation
+        '''
+        messages_transform = []
 
-        return response.output_text
+        for message in messages:
+            if not isinstance(message['content'], list):
+                messages_transform.append(message)
+            else:
+                trim_message = {}
+                trim_message['role'] = 'user'
+                trim_message['content'] = []
+                for content_dict in message['content']:
+                    content_trim_dict = {}
+                    for key, value in content_dict.items():
+                        if key == 'image_url':
+                            content_trim_dict[key] = f'data:image/jpeg;base64,{value}'
+                        else:
+                            content_trim_dict[key] = value
+                    trim_message['content'].append(content_trim_dict)
+                messages_transform.append(trim_message)
+        return messages_transform
 
+    # def _ask_with_image(self, image_bytes: bytes, text: str|None):
+    #     messages = [
+    #         {
+    #             'role': 'user',
+    #             'content': [
+    #                 {'type': 'input_text', 'text': text},
+    #                 {'type': 'input_image', 'image_url': f"data:image/jpeg;base64,{image_bytes}"},
+    #             ]
+    #         }
+    #     ]
+    #     response = self.client.responses.create(
+    #         model=self.model,
+    #         instructions=self.instructions,
+    #         input=messages,
+    #     )
+    #
+    #     return response.output_text
+    #
