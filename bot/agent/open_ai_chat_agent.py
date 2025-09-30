@@ -1,14 +1,14 @@
 from openai import OpenAI
 
-from bot.agent.base_agent import AbstractAgentClass, messages_typing
-from bot.common.constants import OPENAI_TOKEN, scenarios, bot_parameters
+from bot.agent.base_agent import BaseAgentClass, messages_typing
+from bot.common.constants import OPENAI_TOKEN, agent_scenarios, bot_parameters
 
 
-class OpenAIAgent(AbstractAgentClass):
+class OpenAIAgent(BaseAgentClass):
     def __init__(self):
         self.client = OpenAI(api_key=OPENAI_TOKEN)
         self.model = bot_parameters['model']
-        self.instructions = scenarios['instructions']
+        self.instructions = agent_scenarios['instructions']
 
     def ask(self, messages: messages_typing) -> str:
         """

@@ -1,6 +1,6 @@
-from bot.agent.base_agent import AbstractAgentClass
+from bot.agent.base_agent import BaseAgentClass
 
-class TestAgent(AbstractAgentClass):
+class TestAgent(BaseAgentClass):
     def ask(self, messages) -> str:
         return 'that is test agent response'
 

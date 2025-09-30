@@ -1,5 +1,11 @@
+from datetime import datetime
 import logging
-from telegram import Update, Bot, InputMediaPhoto
+
+from PIL import Image
+import io
+from telegram import Update, Bot
+from telegram.constants import ParseMode
+from telegram.error import BadRequest
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -7,9 +13,10 @@ from telegram.ext import (
     filters,
     CallbackContext,
 )
-from bot.agent.base_agent import AbstractAgentClass
-from bot.common.constants import TELEGRAM_TOKEN, bot_parameters, CHAT_HISTORY_MESSAGE_COUNT
-from bot.common.debug_tools import transform_long_history_messages
+from bot.agent.base_agent import BaseAgentClass
+from bot.client.client_messages import Message, MessageType, MessageContent
+from bot.common.constants import TELEGRAM_TOKEN, bot_parameters, bot_scenarios
+from bot.common.utils import escape_markdown_v2
 
 
 logger = logging.getLogger(__name__)
@@ -24,60 +31,80 @@ class Client:
 
         if bot_parameters['agent'] == 'open_ai_chat_agent':
             from bot.agent.open_ai_chat_agent import OpenAIAgent
-            self.agent: AbstractAgentClass = OpenAIAgent()
+            self.agent: BaseAgentClass = OpenAIAgent()
+        elif bot_parameters['agent'] == 'gemini_agent':
+            from bot.agent.gemini_agent import GeminiAgent
+            self.agent: BaseAgentClass = GeminiAgent()
         else:
             from bot.agent.test_agent import TestAgent
-            self.agent: AbstractAgentClass = TestAgent()
+            self.agent: BaseAgentClass = TestAgent()
+
+    async def _reply_with_markdown(self, update: Update, markdown_text: str|None) -> None:
+        if markdown_text is None:
+            await update.message.reply_text(bot_scenarios['bad_request_llm_reply'])
+            return
+
+        sanitized_text = escape_markdown_v2(markdown_text)
+        try:
+            # First, try to send with Markdown formatting
+            await update.message.reply_text(sanitized_text, parse_mode=ParseMode.MARKDOWN_V2)
+            logger.info("sanitized_text was sent")
+
+        except BadRequest as e:
+            # Check if the error is the one we're looking for
+            if "Can't parse entities" in str(e):
+                logger.warning(f"couldn't parse markdown from llm, {sanitized_text=}")
+                # If it is, send the message again as plain text
+                await update.message.reply_text(sanitized_text)
+            else:
+                await update.message.reply_text(bot_scenarios['bad_request_llm_reply'])
 
     async def start(self, update: Update, context: CallbackContext):
         logger.info('start message request')
         await update.message.reply_text(
-            "👋 Hi there! Send me text or an image, and I'll forward it to my AI agent."
+            bot_scenarios['welcome_message'], parse_mode='markdown',
         )
 
     async def handle_image(self, update: Update, context: CallbackContext):
+        user_id = update.message.from_user.id
+
         caption = update.message.caption
-        caption = caption if caption else ""
 
         photo = update.message.photo[-1]
-        file = await photo.get_file()
-        img_bytes = await file.download_as_bytearray()
+        tg_file = await photo.get_file()
 
-        #upddate conversation history
-        history = context.user_data.setdefault("history", [])
-        history_update = {
-            'role': 'user', 
-            'content': [
-                {'type': 'text', 'text': caption},
-                {'type': 'image_url', 'image_url': img_bytes},
-            ]
-        }
-        history.append(history_update)
-        context.user_data['history'] = history[-CHAT_HISTORY_MESSAGE_COUNT:]
+        image_bytearray = await tg_file.download_as_bytearray()
+        telegram_image = Image.open(io.BytesIO(image_bytearray))
+
+        img_byte_stream = io.BytesIO()
+        telegram_image.save(img_byte_stream, format='JPEG')
+        img_byte_stream.seek(0)
+
+        message_content = []
+        image_message_content = MessageContent(MessageType.IMAGE, img_byte_stream)
+        message_content.append(image_message_content)
+
+        if caption:
+            text_message_content = MessageContent(MessageType.TEXT, caption)
+            message_content.append(text_message_content)
+        
+        message = Message(str(user_id), message_content, datetime.now())
 
         #ask agent and reply
-        response = self.agent.ask(context.user_data['history'])
-        await update.message.reply_text(response)
+        await update.message.reply_text(bot_scenarios['agent_wait_message_with_photo'], parse_mode='markdown')
+        response = self.agent.ask(message)
+        await self._reply_with_markdown(update, response.text)
 
-        # update history with agent reply
-        history.append({'role': 'assistant', 'content': response})
-        context.user_data['history'] = history[-CHAT_HISTORY_MESSAGE_COUNT:]
-        logger.info(f'current story: "{transform_long_history_messages(context.user_data['history'])}"')
 
     async def handle_text(self, update: Update, context: CallbackContext):
+        user_id = update.message.from_user.id
         user_text = update.message.text
-        # update history with user request
-        history = context.user_data.setdefault("history", [])
-        history.append({'role': 'user', 'content': user_text})
-        context.user_data['history'] = history[-CHAT_HISTORY_MESSAGE_COUNT:]
 
         # ask agent and reply
-        response = self.agent.ask(context.user_data['history'])
-        await update.message.reply_text(response)
-
-        history.append({'role': 'assistant', 'content': response})
-        context.user_data['history'] = history[-CHAT_HISTORY_MESSAGE_COUNT:]
-        logger.info(f'current story: "{transform_long_history_messages(context.user_data['history'])}"')
+        message = Message(user_id, [MessageContent(MessageType.TEXT, user_text)], datetime.now())
+        await update.message.reply_text(bot_scenarios['agent_wait_message_with_text'], parse_mode='markdown')
+        response = self.agent.ask(message)
+        await self._reply_with_markdown(update, response.text)
 
     def run(self):
         self.application.run_polling(allowed_updates=Update.ALL_TYPES)
