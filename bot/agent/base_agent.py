@@ -19,7 +19,7 @@ class AgentResponse:
     error_message: str|None
 
 
-class BaseAgentClass(ABC):
+class BaseAgent(ABC):
 
     def __init__(self) -> None:
         self._chats: dict[str, AgentChat] = {}
@@ -57,6 +57,6 @@ class BaseAgentClass(ABC):
         self._chats[user_id] = agent_chat
 
     @abstractmethod
-    def ask(self, message: Message) -> AgentResponse:
+    async def ask(self, message: Message) -> AgentResponse:
         pass
 

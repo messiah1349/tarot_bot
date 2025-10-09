@@ -1,4 +1,3 @@
-agent: gemini_agent   # or open_ai_chat_agent
-# model: gemini-2.5-flash
-model: gemini-2.5-flash-lite-preview-06-17
+agent: open_ai_agent   # or open_ai_chat_agent
+time_between_chat_messages_in_seconds: 300 
 

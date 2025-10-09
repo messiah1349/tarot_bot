@@ -4,7 +4,7 @@ from datetime import datetime
 from google import genai
 from google.genai.types import Content, Part
 
-from bot.agent.base_agent import BaseAgentClass, AgentResponse
+from bot.agent.base_agent import BaseAgent, AgentResponse
 from bot.agent.agent_chat import AgentChat
 from bot.client.client_messages import Message, MessageType
 from bot.common.constants import GEMINI_TOKEN, GEMINI_MODEL, agent_scenarios, bot_parameters
@@ -12,7 +12,7 @@ from bot.common.constants import GEMINI_TOKEN, GEMINI_MODEL, agent_scenarios, bo
 logger = logging.getLogger(__name__)
 
 
-class GeminiAgent(BaseAgentClass):
+class GeminiAgent(BaseAgent):
 
     def __init__(self) -> None:
         super().__init__()
@@ -29,12 +29,12 @@ class GeminiAgent(BaseAgentClass):
     def _chat_message_counts(self, agent_chat: AgentChat) -> int:
         return len(agent_chat.chat)
 
-    def _call_gemini(self, messages: list[Content]) -> str|None:
+    async def _call_gemini(self, messages: list[Content]) -> str|None:
         config = {'system_instruction': agent_scenarios['instructions']}
-        response = self._client.models.generate_content(model=GEMINI_MODEL, contents=messages, config=config)
+        response = await self._client.aio.models.generate_content(model=GEMINI_MODEL, contents=messages, config=config)
         return response.text
 
-    def ask(self, message: Message) -> AgentResponse:
+    async def ask(self, message: Message) -> AgentResponse:
         user_id = str(message.user_id)
         agent_chat = self._get_agent_chat(user_id)
         chat = agent_chat.chat
@@ -54,7 +54,7 @@ class GeminiAgent(BaseAgentClass):
         chat.append(Content(role='user', parts=parts))
 
         try:
-            response_text = self._call_gemini(chat)
+            response_text = await self._call_gemini(chat)
             chat.append(Content(role='model', parts=[Part(text=response_text)]))
             updated_agent_chat = AgentChat(chat, datetime.now(), True)
             self._set_agent_chat(user_id, updated_agent_chat)
